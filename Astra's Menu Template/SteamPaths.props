@@ -1,0 +1,25 @@
+<Project>
+  <!-- Optional local override; normally Steam and its libraries are detected automatically. -->
+  <Import Project="GamePath.user.props" Condition="Exists('GamePath.user.props')" />
+
+  <PropertyGroup Condition="'$(GorillaTagPath)' == ''">
+    <!-- Steam records the full game directory, regardless of the drive or library name. -->
+    <_SteamGameInstallPath Condition="'$(OS)' == 'Windows_NT'">$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 1533390', 'InstallLocation', '', RegistryView.Registry32, RegistryView.Registry64))</_SteamGameInstallPath>
+    <GorillaTagPath Condition="Exists('$(_SteamGameInstallPath)\Gorilla Tag_Data\Managed\Assembly-CSharp.dll')">$(_SteamGameInstallPath)</GorillaTagPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(GorillaTagPath)' == ''">
+    <_SteamInstallPath>$(SteamPath)</_SteamInstallPath>
+    <_SteamInstallPath Condition="'$(_SteamInstallPath)' == '' and '$(OS)' == 'Windows_NT'">$([MSBuild]::GetRegistryValueFromView('HKEY_CURRENT_USER\Software\Valve\Steam', 'SteamPath', '', RegistryView.Registry32, RegistryView.Registry64))</_SteamInstallPath>
+    <_SteamInstallPath Condition="'$(_SteamInstallPath)' == '' and '$(OS)' == 'Windows_NT'">$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam', 'InstallPath', '', RegistryView.Registry32, RegistryView.Registry64))</_SteamInstallPath>
+    <_SteamInstallPath Condition="'$(_SteamInstallPath)' == ''">$([MSBuild]::GetProgramFiles32())\Steam</_SteamInstallPath>
+    <_SteamLibraryFile>$(_SteamInstallPath)\steamapps\libraryfolders.vdf</_SteamLibraryFile>
+    <_SteamLibraryText Condition="Exists('$(_SteamLibraryFile)')">$([System.IO.File]::ReadAllText(`$(_SteamLibraryFile)`))</_SteamLibraryText>
+    <!-- Find the library whose apps block contains Gorilla Tag's Steam app ID. -->
+    <_GorillaTagLibrary>$([System.Text.RegularExpressions.Regex]::Match(`$(_SteamLibraryText)`, `(?s)&quot;path&quot;\s+&quot;([^&quot;]+)&quot;(?:(?!&quot;path&quot;).)*?&quot;apps&quot;\s*\{[^}]*&quot;1533390&quot;\s+&quot;[^&quot;]*&quot;`).Groups[1].Value)</_GorillaTagLibrary>
+    <_GorillaTagLibrary>$(_GorillaTagLibrary.Replace('\\', '\'))</_GorillaTagLibrary>
+    <GorillaTagPath Condition="'$(_GorillaTagLibrary)' != '' and Exists('$(_GorillaTagLibrary)\steamapps\common\Gorilla Tag\Gorilla Tag_Data\Managed\Assembly-CSharp.dll')">$(_GorillaTagLibrary)\steamapps\common\Gorilla Tag</GorillaTagPath>
+    <!-- Preserve the original default location when no installation is available. -->
+    <GorillaTagPath Condition="'$(GorillaTagPath)' == ''">$(_SteamInstallPath)\steamapps\common\Gorilla Tag</GorillaTagPath>
+  </PropertyGroup>
+</Project>

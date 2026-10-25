@@ -24,6 +24,24 @@ This project provides a complete menu framework for developers who want to creat
 - Visual Studio 2022 or another compatible C# IDE
 - Required Unity, Gorilla Tag, Photon, and SteamVR references
 
+## Opening and Building
+
+Open `Astra's Menu Template.sln` and build as usual. The project detects Gorilla Tag from Steam's installation records or `steamapps/libraryfolders.vdf`, including libraries on other drives and Steam installed in a custom folder. You do not need to replace drive letters or re-add DLL references.
+
+The existing build settings are unchanged: the DLL still builds directly into the detected game's `BepInEx/plugins/MO` folder. Debug/Release behavior, target framework, assembly references, and dependency copy settings stay the same.
+
+Gorilla Tag and BepInEx 5 must already be installed. If your installation is not registered with Steam, create `GamePath.user.props` beside `Astras Menu Template.csproj`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <GorillaTagPath>E:\My Games\Gorilla Tag</GorillaTagPath>
+  </PropertyGroup>
+</Project>
+```
+
+Set this to your game's root folder, containing `Gorilla Tag_Data` and `BepInEx`. This local file is ignored by Git. You can also pass `-p:GorillaTagPath="E:\My Games\Gorilla Tag"` to MSBuild or `dotnet build`. For a custom Steam client folder, the optional `SteamPath` property controls the `libraryfolders.vdf` fallback.
+
 ## Creating Buttons
 
 Create a new C# class inside the `Mods` folder.
