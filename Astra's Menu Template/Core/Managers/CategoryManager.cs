@@ -12,7 +12,7 @@ public static class CategoryManager
     public static string CurrentCategory { get; private set; } = Home;
     public static int PageNumber { get; private set; }
     public static int PageLimit = 5; // I really have no idea why i added this.
-    public static bool IsHome => CurrentCategory == Home;
+    public static bool IsHome => !SearchManager.Active && CurrentCategory == Home;
     public static event Action? OnPageChanged;
 
     public static void Initialize()
@@ -22,12 +22,12 @@ public static class CategoryManager
         Back();
     }
     public static IReadOnlyList<string> GetVisibleCategories() => CategoriesInternal.Skip(PageNumber * Mathf.Max(1, PageLimit)).Take(Mathf.Max(1, PageLimit)).ToList();
-    public static IReadOnlyList<ButtonManager.ButtonData> GetVisibleButtons() => IsHome ? new List<ButtonManager.ButtonData>() : ButtonManager.GetCategory(CurrentCategory).Skip(PageNumber * Mathf.Max(1, PageLimit)).Take(Mathf.Max(1, PageLimit)).ToList();
+    public static IReadOnlyList<ButtonManager.ButtonData> GetVisibleButtons() => SearchManager.Active ? SearchManager.Results.Skip(PageNumber * Mathf.Max(1, PageLimit)).Take(Mathf.Max(1, PageLimit)).ToList() : IsHome ? new List<ButtonManager.ButtonData>() : ButtonManager.GetCategory(CurrentCategory).Skip(PageNumber * Mathf.Max(1, PageLimit)).Take(Mathf.Max(1, PageLimit)).ToList();
     public static int TotalPages
     {
         get
         {
-            int count = IsHome ? CategoriesInternal.Count : ButtonManager.GetCategory(CurrentCategory).Count;
+            int count = SearchManager.Active ? SearchManager.Results.Count : IsHome ? CategoriesInternal.Count : ButtonManager.GetCategory(CurrentCategory).Count;
             return Mathf.Max(1, Mathf.CeilToInt(count / (float)Mathf.Max(1, PageLimit)));
         }
     }
@@ -35,11 +35,14 @@ public static class CategoryManager
     {
         string? found = CategoriesInternal.FirstOrDefault(c => string.Equals(c, category, StringComparison.OrdinalIgnoreCase));
         if (found == null) return;
+        SearchManager.Close();
         CurrentCategory = found;
         PageNumber = 0;
         OnPageChanged?.Invoke();
     }
-    public static void Back() { CurrentCategory = Home; PageNumber = 0; OnPageChanged?.Invoke(); }
+    public static void Back() { SearchManager.Close(); CurrentCategory = Home; PageNumber = 0; OnPageChanged?.Invoke(); }
+    public static void SearchChanged() { PageNumber = 0; OnPageChanged?.Invoke(); }
+    public static void SetPageLimit(int limit) { PageLimit = Mathf.Clamp(limit, 1, 12); PageNumber = Mathf.Clamp(PageNumber, 0, TotalPages - 1); OnPageChanged?.Invoke(); }
     public static void NextPage() { PageNumber = (PageNumber + 1) % TotalPages; OnPageChanged?.Invoke(); }
     public static void PreviousPage() { PageNumber = (PageNumber + TotalPages - 1) % TotalPages; OnPageChanged?.Invoke(); }
 }

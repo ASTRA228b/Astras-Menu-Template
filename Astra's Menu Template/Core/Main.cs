@@ -8,13 +8,14 @@ using Astras_Menu_Template.Libraries;
 using Astras_Menu_Template.Libraries.ChudOS;
 using Astras_Menu_Template.Libraries.ChudOS.CanvasNotify;
 using Astras_Menu_Template.Mods.SoundBoard;
+using Astras_Menu_Template.Mods.Settings;
 using Astras_Menu_Template.Stuff;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace Astras_Menu_Template.Core; // Astras_Menu_Template
 
-public class Main : MonoBehaviour
+public partial class Main : MonoBehaviour
 {
     // Other
     public static bool IsMenuOpen;
@@ -52,7 +53,6 @@ public class Main : MonoBehaviour
     private static float LastFPS;
     private static int SmoothedFPS;
     private static Camera? PCamera;
-    private static GameObject? VersionObject;
    // private static Transform? PreviousCameraParent;
    // private static Vector3 PreviousCameraPosition;
    // private static Quaternion PreviousCameraRotation;
@@ -63,6 +63,7 @@ public class Main : MonoBehaviour
         Instance = this;
         FileManager.Initialize(this);
         ButtonManager.Initialize();
+        MenuThemes.Initialize();
         CategoryManager.PageLimit = ButtonPageLimit;
         CategoryManager.Initialize();
         SoundboardManager.Initialize(this);
@@ -78,12 +79,13 @@ public class Main : MonoBehaviour
         NotifiLib.InitToast();
         ArrayListGUI.CreateArray();
         SoundboardGUI.GUIWindow();
+        Astras_Menu_Template.Mods.Test.Test.GUIWindow();
     }
     private void Update()
     {
         ButtonManager.Update();
         SoundboardManager.Tick();
-        GUIManager.Tick();
+        if (!SearchManager.Typing) GUIManager.Tick();
         CanvasNotifyLib.CanvasUpdate();
         Keyboard? keyboard = Keyboard.current;
         bool vr = ControllerInputPoller.instance != null && ControllerInputPoller.instance.leftControllerSecondaryButton;
@@ -98,7 +100,7 @@ public class Main : MonoBehaviour
             }
         }
         LastController = vr;
-        if (keyboard?.hKey.wasPressedThisFrame == true)
+        if (keyboard?.hKey.wasPressedThisFrame == true && Application.isFocused && !SearchManager.Typing)
         {
             if (IsMenuOpen && OnPC) RemoveMenu();
             else
@@ -113,9 +115,8 @@ public class Main : MonoBehaviour
         {
             if (PCamera != null)
             {
-                MenuMain.transform.SetParent(PCamera.transform, false);
-                MenuMain.transform.localPosition = new Vector3(-0.12f, -0.02f, 0.80f);
-                MenuMain.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
+                if (MenuMain.transform.parent != PCamera.transform) MenuMain.transform.SetParent(PCamera.transform, false);
+                RefreshDesktopBounds();
                 if (Mouse.current?.leftButton.wasPressedThisFrame == true)
                 {
                     Ray ray = PCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
@@ -123,6 +124,7 @@ public class Main : MonoBehaviour
                 }
             }
         }
+        UpdateSearchInput(keyboard);
         if (NeedsRefresh) { NeedsRefresh = false; RefreshPage(); }
         if (Time.unscaledTime - LastFPS > 0.25f)
         {
@@ -133,7 +135,7 @@ public class Main : MonoBehaviour
         }
     }
     private void FixedUpdate() { ButtonManager.FixedUpdate(); }
-    private void LateUpdate() { ButtonManager.LateUpdate(); }
+    private void LateUpdate() { ButtonManager.LateUpdate(); FitVisibleLabels(); }
     private void OnDestroy()
     {
         ButtonManager.OnNotification -= Notify;
@@ -147,19 +149,20 @@ public class Main : MonoBehaviour
         if (BackgroundMaterial != null) Destroy(BackgroundMaterial);
         if (OutlineMaterial != null) Destroy(OutlineMaterial);
         if (ButtonMaterial != null) Destroy(ButtonMaterial);
+        ReleaseAppearance();
         Instance = null;
     }
     private static void Notify(string message) => NotifiLib.SendNotificationALL(message, 3500);
     private static void RefreshLater() { NeedsRefresh = true; }
-    private static void RefreshColors() { RefreshLabels(); }
+    private static void RefreshColors()
+    {
+        RefreshLabels();
+        foreach (var button in PageButtons) if (button != null) button.RefreshAppearance();
+    }
     private static void RefreshLabels()
     {
         foreach (var entry in OptionLabels)
-            if (entry.Text != null && entry.Text.text != entry.Button.DisplayName)
-            {
-                entry.Text.text = entry.Button.DisplayName;
-                FitButtonText(entry.Text, entry.Text.text, true);
-            }
+            if (entry.Text != null) UpdateButtonLabel(entry.Text, entry.Button.DisplayName);
     }
 
     public static void OpenPC()
@@ -177,7 +180,7 @@ public class Main : MonoBehaviour
     {
         if (MenuMain != null) return;
         if (GorillaTagger.Instance == null && !OnPC) { IsMenuOpen = false; return; }
-        if (OnPC) SetupDesktopCamera();
+        if (OnPC) { SetupDesktopCamera(); if (PCamera == null) { IsMenuOpen = false; return; } }
         if (BackgroundMaterial == null) CreateMaterials();
         MenuMain = new GameObject("Astra Menu");
         Transform parent = OnPC && PCamera != null ? PCamera.transform : GorillaTagger.Instance!.leftHandTransform;
@@ -186,19 +189,14 @@ public class Main : MonoBehaviour
         MenuMain.transform.localRotation = OnPC ? Quaternion.Euler(0f, -90f, 0f) : Quaternion.Euler(VRMenuRotation);
         MenuMain.transform.localScale = OnPC ? MenuScale : VRMenuScale;
         if (!OnPC) AlignToPalm();
-        // Background
-        MenuBackground = CreateCube("Background", MenuMain.transform, new Vector3(0f, -0.14f, 0f), new Vector3(0.15f, 2.1f, 1f), BackgroundMaterial);
-        CreateOutline(MenuMain.transform, new Vector3(0.065f, -0.14f, 0f), new Vector3(0.15f, 2.1f, 1f), 0f);
         MenuCanvas = new GameObject("Text Root");
         MenuCanvas.transform.SetParent(MenuMain.transform, false);
-        CreateText($"{Constantss.MenuName}", 0.65f, 0f, 0.014f);
-        FPS = CreateText("FPS: --", 0.55f, 0f, 0.012f);
-        VersionObject = CreateText("v" + Constantss.Version, -1.075f, 0.34f, 0.009f, true).gameObject;
-        VersionObject.SetActive(!OnPC);
-        CreateCube("Top Divider", MenuMain.transform, new Vector3(-0.10f, 0.43f, 0f), new Vector3(0.03f, 0.009f, 0.9f), OutlineMaterial);
-        CreateCube("Bottom Divider", MenuMain.transform, new Vector3(-0.10f, -1.08f, 0f), new Vector3(0.03f, 0.009f, 0.9f), OutlineMaterial);
+        BuildShell();
         CreateReferences();
         RefreshPage();
+        Instance?.BindSearchKeyboard(Keyboard.current);
+        RefreshDesktopBounds(true);
+        NeedsRefresh = false;
     }
     private static void AlignToPalm()
     {
@@ -233,10 +231,11 @@ public class Main : MonoBehaviour
 
     private static void CreateMaterials()
     {
-        Shader shader = Shader.Find("GorillaTag/UberShader") ?? Shader.Find("Standard");
+        Shader shader = Shader.Find("Unlit/Color") ?? Shader.Find("GorillaTag/UberShader") ?? Shader.Find("Standard");
         BackgroundMaterial = new Material(shader) { color = MenuColor };
         OutlineMaterial = new Material(shader) { color = MenuOutlineColor };
         ButtonMaterial = new Material(shader) { color = ButtonColor };
+        CreateAppearanceMaterials(shader);
     }
     private static GameObject CreateCube(string name, Transform parent, Vector3 position, Vector3 size, Material? material, bool touchable = false)
     {
@@ -246,6 +245,7 @@ public class Main : MonoBehaviour
         obj.transform.SetParent(parent, false);
 
         if (!OnPC && parent == MenuMain?.transform) position.x = VRMenuFaceOffset - position.x;
+        if (!OnPC && parent == MenuMain?.transform) position.z = -position.z;
         obj.transform.localPosition = position;
         obj.transform.localScale = size;
         if (material != null) obj.GetComponent<Renderer>().sharedMaterial = material;
@@ -267,7 +267,7 @@ public class Main : MonoBehaviour
         obj.transform.SetParent(MenuCanvas!.transform, false);
         float x = back ? 0.16f : -0.19f;
         if (!OnPC) x = VRMenuFaceOffset - x;
-        obj.transform.localPosition = new Vector3(x, y, z);
+        obj.transform.localPosition = new Vector3(x, y, OnPC ? z : -z);
         obj.transform.localRotation = Quaternion.Euler(0f, !OnPC ? (back ? 90f : -90f) : (back ? -90f : 90f), 0f);
         TextMesh text = obj.AddComponent<TextMesh>();
         text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -276,22 +276,30 @@ public class Main : MonoBehaviour
         text.fontSize = 48;
         text.anchor = TextAnchor.MiddleCenter;
         text.alignment = TextAlignment.Center;
-        text.color = Color.white;
+        text.color = TextColor;
+        RegisterText(text, 0.96f, size);
         return text;
     }
     public static void RefreshPage()
     {
         if (MenuMain == null) return;
-        foreach (GameObject obj in PageObjects) if (obj != null) { obj.SetActive(false); Destroy(obj); }
+        foreach (GameObject obj in PageObjects) if (obj != null) { if (obj.TryGetComponent(out TextMesh text)) TextLayouts.Remove(text); obj.SetActive(false); Destroy(obj); }
         PageObjects.Clear(); PageButtons.Clear(); OptionLabels.Clear();
         PageNumber = CategoryManager.PageNumber;
-        CreateButton("Disconnect", 1.02f, special: 4);
-        string title = CategoryManager.IsHome ? "Main" : CategoryManager.CurrentCategory;
-        PageObjects.Add(CreateText(title, 0.34f, 0f, 0.014f).gameObject);
+        CreateButton("Disconnect", 1.07f, special: 4);
+        CreateButton(SearchManager.Query.Length == 0 ? "Search..." : SearchManager.Query, 0.38f, special: 7);
+        string title = SearchManager.Active ? $"SEARCH / {SearchManager.Results.Count} RESULTS" : CategoryManager.IsHome ? "HOME" : CategoryManager.CurrentCategory.ToUpperInvariant();
+        TextMesh breadcrumb = CreateText(title, 0.205f, 0f, 0.011f);
+        SetTextTone(breadcrumb, 1);
+        PageObjects.Add(breadcrumb.gameObject);
         if (CategoryManager.IsHome)
         {
             var cats = CategoryManager.GetVisibleCategories();
-            for (int i = 0; i < cats.Count; i++) CreateButton(cats[i], 0.12f - i * 0.17f, category: cats[i]);
+            for (int i = 0; i < cats.Count; i++)
+            {
+                var slot = MenuLayout.GetSlot(i, MenuThemes.Layout);
+                CreateButton(cats[i], slot.Y, category: cats[i], centerZ: slot.Z, cellWidth: slot.Width, height: slot.Height);
+            }
         }
         else
         {
@@ -299,33 +307,46 @@ public class Main : MonoBehaviour
             for (int i = 0; i < buttons.Count; i++)
             {
                 var button = buttons[i];
-                float y = 0.12f - i * 0.17f;
+                var slot = MenuLayout.GetSlot(i, MenuThemes.Layout);
                 if (button.Type == ButtonType.Option)
                 {
-                    CreateButton(button.DisplayName, y, button, labelOnly: true);
-                    CreateButton("-", y, button, special: 5);
-                    CreateButton("+", y, button, special: 6);
+                    CreateButton(button.DisplayName, slot.Y, button, labelOnly: true, centerZ: slot.Z, cellWidth: slot.Width, height: slot.Height);
+                    CreateButton("-", slot.Y, button, special: 5, centerZ: slot.Z, cellWidth: slot.Width, height: slot.Height);
+                    CreateButton("+", slot.Y, button, special: 6, centerZ: slot.Z, cellWidth: slot.Width, height: slot.Height);
                 }
-                else CreateButton(button.DisplayName, y, button);
+                else CreateButton(button.DisplayName, slot.Y, button, centerZ: slot.Z, cellWidth: slot.Width, height: slot.Height);
+            }
+            if (SearchManager.Active && buttons.Count == 0)
+            {
+                TextMesh empty = CreateText(SearchManager.Query.Trim().Length == 0 ? "Type to find a button" : "No matching buttons", -0.15f, 0f, 0.013f);
+                SetTextTone(empty, 1);
+                PageObjects.Add(empty.gameObject);
             }
         }
-        if (!CategoryManager.IsHome) CreateButton("Back", -1.00f, special: 1);
+        CreateButton("Home", -0.995f, special: 1);
         if (CategoryManager.TotalPages > 1)
         {
-            CreateButton("<", -0.82f, special: 2);
-            CreateButton(">", -0.82f, special: 3);
+            CreateButton("<", -0.995f, special: 2);
+            CreateButton(">", -0.995f, special: 3);
         }
-        PageObjects.Add(CreateText($"{PageNumber + 1}/{CategoryManager.TotalPages}", -0.82f, 0f, 0.012f).gameObject);
+        TextMesh page = CreateText($"PAGE {PageNumber + 1} / {CategoryManager.TotalPages}", -0.83f, 0f, 0.010f);
+        SetTextTone(page, 1);
+        PageObjects.Add(page.gameObject);
+        RefreshSearchKeyboard();
     }
-    private static void CreateButton(string label, float y, ButtonManager.ButtonData? button = null, string category = "", int special = 0, bool labelOnly = false)
+    private static void CreateButton(string label, float y, ButtonManager.ButtonData? button = null, string category = "", int special = 0, bool labelOnly = false, float centerZ = 0f, float cellWidth = 0.97f, float height = 0.15f, string key = "", bool keyboard = false)
     {
-        float z = special == 3 || special == 5 ? -0.36f : special == 2 || special == 6 ? 0.36f : 0f;
-        float width = special >= 2 && special != 4 ? 0.19f : special == 1 ? 0.32f : special == 4 ? 0.95f : 0.89f;
-        GameObject obj = CreateCube(label, MenuMain!.transform, new Vector3(-0.12f, y, z), new Vector3(0.07f, special == 4 ? 0.155f : 0.145f, width), ButtonMaterial, !labelOnly);
-        PageObjects.Add(obj);
+        float arrow = cellWidth < 0.7f ? 0.075f : 0.16f;
+        float z = special == 2 ? 0.40f : special == 3 ? -0.40f : special == 5 ? centerZ + cellWidth / 2f - arrow / 2f : special == 6 ? centerZ - cellWidth / 2f + arrow / 2f : centerZ;
+        float width = special == 2 || special == 3 ? 0.16f : special == 5 || special == 6 ? arrow : special == 1 ? 0.50f : special == 4 || special == 7 ? 0.97f : labelOnly ? cellWidth - 2f * (arrow + 0.02f) : cellWidth;
+        GameObject obj = CreateCube(label, MenuMain!.transform, new Vector3(-0.12f, y, z), new Vector3(0.07f, height, width), special == 4 || special == 7 ? HeaderMaterial : ButtonMaterial, !labelOnly);
+        StyleButton(obj);
+        var objects = keyboard ? KeyboardObjects : PageObjects;
+        objects.Add(obj);
+        MenuButtonCollider? collision = null;
         if (!labelOnly)
         {
-            MenuButtonCollider collision = obj.AddComponent<MenuButtonCollider>();
+            collision = obj.AddComponent<MenuButtonCollider>();
             collision.RelatedButton = button;
             collision.RelatedCategory = category;
             collision.Back = special == 1;
@@ -335,25 +356,25 @@ public class Main : MonoBehaviour
             collision.Incremental = special == 5 || special == 6;
             collision.Positive = special == 6;
             collision.IgnoreToggleColor = collision.Incremental;
-            PageButtons.Add(collision);
+            collision.SearchToggle = special == 7;
+            collision.KeyboardKey = key;
+            collision.IdleColor = special == 4 || special == 7 ? HeaderColor : ButtonColor;
+            if (!keyboard) PageButtons.Add(collision);
         }
-        TextMesh text = CreateText(label, y, z, 0.014f);
-        FitButtonText(text, label, labelOnly, special);
-        if (!labelOnly && PageButtons.Count > 0) PageButtons[PageButtons.Count - 1].Label = text;
+        float textWidth = Mathf.Max(0.035f, width - (width < 0.2f ? 0.025f : 0.05f));
+        TextMesh text = CreateText(FormatButtonLabel(label, textWidth), y, z, 0.014f);
+        RegisterText(text, textWidth, height < 0.13f ? 0.012f : 0.015f, height - 0.025f);
+        if (collision != null) collision.Label = text;
         if (labelOnly && button != null) OptionLabels.Add((button, text));
-        PageObjects.Add(text.gameObject);
+        objects.Add(text.gameObject);
+        collision?.RefreshAppearance();
     }
 
     public static void FitButtonText(TextMesh text, string label, bool option = false, int special = 0)
     {
         if (text == null) return;
-        float size = special == 5 || special == 6 ? 0.012f : 0.015f;
-        int characters = Math.Max(1, label.Length);
-
-        float limit = option ? 0.0105f : 0.0145f;
-        if (special == 1 || special == 2 || special == 3) limit = 0.013f;
-        size = Mathf.Min(size, limit * (option ? 17f : 21f) / characters);
-        text.characterSize = Mathf.Clamp(size, option ? 0.008f : 0.009f, 0.015f);
+        float width = option ? 0.56f : special == 2 || special == 3 || special == 5 || special == 6 ? 0.12f : special == 1 ? 0.44f : 0.89f;
+        RegisterText(text, width, special == 2 || special == 3 ? 0.018f : 0.015f);
     }
 
     public static bool TryGetReferenceHand(Collider collider, out bool rightHand)
@@ -386,17 +407,23 @@ public class Main : MonoBehaviour
     private static IEnumerator Delay(Action action)
     {
         Pending = true;
-        yield return new WaitForSecondsRealtime(0.5f);
+        yield return new WaitForSecondsRealtime(0.12f);
         if (IsMenuOpen) action();
         Pending = false;
     }
     public static void RemoveMenu()
     {
         IsMenuOpen = false; Pending = false;
+        Instance?.BindSearchKeyboard(null);
+        bool wasSearching = SearchManager.Active;
+        SearchManager.Close();
+        if (wasSearching) CategoryManager.SearchChanged();
+        ClearSearchKeyboard();
         if (MenuMain != null) { MenuMain.SetActive(false); Destroy(MenuMain); }
         if (RightReference != null) Destroy(RightReference);
-        MenuMain = null; MenuCanvas = null; MenuBackground = null; VersionObject = null; RightReference = null; RightButtonCollider = null; FPS = null;
+        MenuMain = null; MenuCanvas = null; MenuBackground = null; RightReference = null; RightButtonCollider = null; FPS = null;
         PageObjects.Clear(); PageButtons.Clear(); OptionLabels.Clear();
+        TextLayouts.Clear();
         ResetDesktopCamera();
     }
 }

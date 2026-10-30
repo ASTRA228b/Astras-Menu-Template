@@ -44,7 +44,7 @@ public static class Test
 
     // TOGGLE + UPDATE: This method executes each Update while the button is ON.
     // InputLib exposes controller buttons and joystick axes.
-    [MenuButton("Trigger Test", ButtonType.Toggle, Category = "Test", Order = 2, runOption = RunOption.Update, Description = "Detect right trigger presses", Notify = false)]
+    [MenuButton("Trigger Test", ButtonType.Toggle, Category = "Test", Order = 2, Controls = "(RT)", runOption = RunOption.Update, Description = "Detect right trigger presses", Notify = false)]
     public static void TriggerTest()
     {
         if (ControllerInputPoller.instance == null) return;
@@ -91,7 +91,7 @@ public static class Test
     public static void RunOnce() => Debug.Log("[Astra Template] Run Once was enabled.");
 
     // FIXED UPDATE: Use FixedUpdate for physics-related updates.
-    [MenuButton("Grip Test", ButtonType.Toggle, Category = "Test", Order = 5, runOption = RunOption.FixedUpdate, Description = "Detect left grip presses", Notify = false)]
+    [MenuButton("Grip Test", ButtonType.Toggle, Category = "Test", Order = 5, Controls = "(LG)", runOption = RunOption.FixedUpdate, Description = "Detect left grip presses", Notify = false)]
     public static void GripTest()
     {
         if (ControllerInputPoller.instance == null) return;

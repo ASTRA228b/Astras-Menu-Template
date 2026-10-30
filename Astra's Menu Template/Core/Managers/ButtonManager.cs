@@ -18,7 +18,16 @@ public static class ButtonManager
         public ButtonType Type => Attribute.Type;
         public string Category => Attribute.Category;
         public string Option => Type == ButtonType.Option && Attribute.Options.Length > 0 ? Attribute.Options[OptionIndex] : "";
-        public string DisplayName => Type == ButtonType.Toggle ? $"{Name} [{(Enabled ? "ON" : "OFF")}]" : Type == ButtonType.Option ? $"{Name}: {Option}" : Name;
+        public string DisplayName
+        {
+            get
+            {
+                string label = Name;
+                if (!string.IsNullOrWhiteSpace(Attribute.Controls)) label += " " + Attribute.Controls;
+                if (Type == ButtonType.Toggle) return $"{label} [{(Enabled ? "ON" : "OFF")}]";
+                return Type == ButtonType.Option ? $"{label}: {Option}" : label;
+            }
+        }
     }
 
     private static readonly List<ButtonData> All = new();
